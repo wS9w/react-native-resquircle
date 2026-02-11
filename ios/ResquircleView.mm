@@ -1,6 +1,7 @@
 #import "ResquircleView.h"
 
 #import <React/RCTConversions.h>
+#import <React/RCTComponentViewProtocol.h>
 
 #import <react/renderer/components/ResquircleViewSpec/ComponentDescriptors.h>
 #import <react/renderer/components/ResquircleViewSpec/Props.h>
@@ -15,7 +16,8 @@ using namespace facebook::react;
 #endif
 
 @implementation ResquircleView {
-    ResquircleDrawingView * _view;
+    ResquircleDrawingView * _contentView;
+    ResquircleDrawingView * _shadowView;
 }
 
 + (ComponentDescriptorProvider)componentDescriptorProvider
@@ -29,9 +31,20 @@ using namespace facebook::react;
     static const auto defaultProps = std::make_shared<const ResquircleViewProps>();
     _props = defaultProps;
 
-    _view = [[ResquircleDrawingView alloc] init];
+    // Never clip at the root level: we want shadows to be able to render
+    // outside bounds even when overflow="hidden" is used for content clipping.
+    self.clipsToBounds = NO;
+    self.layer.masksToBounds = NO;
 
-    self.contentView = _view;
+    // Content view: hosts Fabric children + draws fill/border and applies clipping mask.
+    _contentView = [[ResquircleDrawingView alloc] init];
+    // Shadow view: draws shadows without being clipped by overflow.
+    _shadowView = [[ResquircleDrawingView alloc] init];
+    _shadowView.drawSquircleLayer = NO;
+    _shadowView.clipContent = NO;
+
+    self.contentView = _contentView;
+    [self insertSubview:_shadowView belowSubview:self.contentView];
   }
 
   return self;
@@ -40,7 +53,8 @@ using namespace facebook::react;
 - (void)layoutSubviews
 {
   [super layoutSubviews];
-  _view.frame = self.bounds;
+  _shadowView.frame = self.bounds;
+  _contentView.frame = self.bounds;
 }
 
 - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps
@@ -50,44 +64,71 @@ using namespace facebook::react;
 
     // Back-compat
     if (oldViewProps.color != newViewProps.color) {
-        _view.squircleBackgroundColor = RCTUIColorFromSharedColor(newViewProps.color);
+        UIColor *c = RCTUIColorFromSharedColor(newViewProps.color);
+        _contentView.squircleBackgroundColor = c;
+        _shadowView.squircleBackgroundColor = c;
     }
 
     if (oldViewProps.squircleBackgroundColor != newViewProps.squircleBackgroundColor) {
-        _view.squircleBackgroundColor = RCTUIColorFromSharedColor(newViewProps.squircleBackgroundColor);
+        UIColor *c = RCTUIColorFromSharedColor(newViewProps.squircleBackgroundColor);
+        _contentView.squircleBackgroundColor = c;
+        _shadowView.squircleBackgroundColor = c;
     }
 
     if (oldViewProps.squircleBorderColor != newViewProps.squircleBorderColor) {
-        _view.squircleBorderColor = RCTUIColorFromSharedColor(newViewProps.squircleBorderColor);
+        UIColor *c = RCTUIColorFromSharedColor(newViewProps.squircleBorderColor);
+        _contentView.squircleBorderColor = c;
+        _shadowView.squircleBorderColor = c;
     }
 
     if (oldViewProps.squircleBorderWidth != newViewProps.squircleBorderWidth) {
-        _view.squircleBorderWidth = newViewProps.squircleBorderWidth;
+        CGFloat w = newViewProps.squircleBorderWidth;
+        _contentView.squircleBorderWidth = w;
+        _shadowView.squircleBorderWidth = w;
     }
 
     if (oldViewProps.borderRadius != newViewProps.borderRadius) {
-        _view.borderRadius = newViewProps.borderRadius;
+        CGFloat r = newViewProps.borderRadius;
+        _contentView.borderRadius = r;
+        _shadowView.borderRadius = r;
     }
 
     if (oldViewProps.cornerSmoothing != newViewProps.cornerSmoothing) {
-        _view.cornerSmoothing = newViewProps.cornerSmoothing;
+        CGFloat s = newViewProps.cornerSmoothing;
+        _contentView.cornerSmoothing = s;
+        _shadowView.cornerSmoothing = s;
     }
 
     if (oldViewProps.squircleBoxShadow != newViewProps.squircleBoxShadow) {
         NSString *shadow = newViewProps.squircleBoxShadow.empty()
           ? nil
           : [NSString stringWithUTF8String:newViewProps.squircleBoxShadow.c_str()];
-        _view.squircleBoxShadow = shadow;
+        // Shadows should stay visible even when content is clipped.
+        _shadowView.squircleBoxShadow = shadow;
+        _contentView.squircleBoxShadow = nil;
     }
 
-    if (oldViewProps.overflow != newViewProps.overflow) {
-        NSString *overflow = newViewProps.overflow.empty()
-          ? nil
-          : [NSString stringWithUTF8String:newViewProps.overflow.c_str()];
-        _view.overflow = overflow;
+    if (oldViewProps.clipContent != newViewProps.clipContent) {
+        // Clip only content (and its children). Keep shadow un-clipped.
+        _contentView.clipContent = newViewProps.clipContent;
+        _shadowView.clipContent = NO;
     }
 
     [super updateProps:props oldProps:oldProps];
+}
+
+// MARK: - Child mounting (Fabric)
+// Ensure children are mounted inside `_contentView` so they participate in squircle clipping.
+- (void)mountChildComponentView:(UIView<RCTComponentViewProtocol> *)childComponentView index:(NSInteger)index
+{
+  // Mount Fabric children inside the dedicated container that we clip (not the whole view),
+  // so borders can stay on top and shadows can remain visible.
+  [_contentView.reactContentView insertSubview:childComponentView atIndex:index];
+}
+
+- (void)unmountChildComponentView:(UIView<RCTComponentViewProtocol> *)childComponentView index:(NSInteger)index
+{
+  [childComponentView removeFromSuperview];
 }
 
 @end

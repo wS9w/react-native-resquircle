@@ -34,10 +34,9 @@ export interface NativeResquircleViewProps extends ViewProps {
    */
   squircleBoxShadow?: string;
   /**
-   * Controls whether the squircle itself is clipped (shadows, etc).
-   * Note: this does not automatically clip siblings in JS wrapper.
+   * Clip children to the squircle shape (iOS).
    */
-  overflow?: string;
+  clipContent?: boolean;
   /**
    * Back-compat: old example prop. Treated as squircleBackgroundColor.
    */
