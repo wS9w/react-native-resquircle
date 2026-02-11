@@ -7,11 +7,11 @@ import {
 
 export default function App() {
   const boxShadow = buildBoxShadow([
-    { x: 0, y: 2, blur: 4, spread: 10, color: '#ff0000ff', opacity: 12 },
-    { x: 0, y: 7, blur: 7, spread: 10, color: '#ff0000ff', opacity: 10 },
-    { x: 0, y: 16, blur: 10, spread: 10, color: '#ff0000ff', opacity: 6 },
-    { x: 0, y: 29, blur: 12, spread: 10, color: '#ff0000ff', opacity: 2 },
-    { x: 0, y: 46, blur: 13, spread: 10, color: '#f70000ff', opacity: 0 },
+    { x: 0, y: 2, blur: 0, spread: 10, color: 'rgb(255, 234, 0)', opacity: 12 },
+    { x: 0, y: 7, blur: 0, spread: 10, color: 'rgb(255 , 255 , 0)', opacity: 10 },
+    { x: 0, y: 16, blur: 0, spread: 10, color: 'rgb(255 , 255 , 0)', opacity: 6 },
+    { x: 0, y: 29, blur: 0, spread: 10, color: 'rgb(255 , 255 , 0)', opacity: 2 },
+    { x: 0, y: 46, blur: 0, spread: 10, color: 'rgb(255 , 255 , 0)', opacity: 0 },
   ]);
 
   return (
@@ -26,7 +26,7 @@ export default function App() {
       <ResquircleView
         cornerSmoothing={1}
         overflow="hidden"
-        style={[styles.card, { backgroundColor: 'rgb(67, 67, 12)'} ,]}
+        style={[styles.card, { backgroundColor: 'rgb(255, 255, 255)', boxShadow} ]}
       >
         <View style={styles.overflowRow}>
           <View style={styles.overflowBlob} />
@@ -39,12 +39,14 @@ export default function App() {
 
       <Text style={styles.sectionTitle}>Button</Text>
       <ResquircleButton
+       overflow='hidden'
         cornerSmoothing={1}
         style={styles.button}
         onPress={() => {
           console.log('pressed');
         }}
       >
+        {/* <View style={{backgroundColor: 'red', width: 400 , height: 300 , }}/> */}
         <Text style={styles.buttonText}>ResquircleButton</Text>
       </ResquircleButton>
 
@@ -113,8 +115,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: -40,
     top: -40,
-    width: 140,
-    height: 140,
+    width: 200,
+    height: 200,
     borderRadius: 999,
     backgroundColor: '#4F46E5',
     opacity: 0.6,
