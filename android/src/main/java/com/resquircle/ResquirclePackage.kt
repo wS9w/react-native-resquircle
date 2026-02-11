@@ -13,5 +13,5 @@ class ResquircleViewPackage : BaseReactPackage() {
 
   override fun getModule(name: String, reactContext: ReactApplicationContext): NativeModule? = null
 
-  override fun getReactModuleInfoProvider() = ReactModuleInfoProvider { emptyMap() }
+  override fun getReactModuleInfoProvider(): ReactModuleInfoProvider = ReactModuleInfoProvider { emptyMap() }
 }

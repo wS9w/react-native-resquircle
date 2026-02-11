@@ -30,9 +30,45 @@ class ResquircleViewManager : SimpleViewManager<ResquircleView>(),
     return ResquircleView(context)
   }
 
+  // Back-compat: old example prop.
   @ReactProp(name = "color")
   override fun setColor(view: ResquircleView?, color: Int?) {
-    view?.setBackgroundColor(color ?: Color.TRANSPARENT)
+    view?.setViewBackgroundColor(color ?: Color.TRANSPARENT)
+  }
+
+  @ReactProp(name = "squircleBackgroundColor")
+  override fun setSquircleBackgroundColor(view: ResquircleView?, color: Int?) {
+    view?.setViewBackgroundColor(color ?: Color.TRANSPARENT)
+  }
+
+  @ReactProp(name = "squircleBorderColor")
+  override fun setSquircleBorderColor(view: ResquircleView?, color: Int?) {
+    view?.setBorderColor(color ?: Color.TRANSPARENT)
+  }
+
+  @ReactProp(name = "squircleBorderWidth", defaultFloat = 0f)
+  override fun setSquircleBorderWidth(view: ResquircleView?, width: Float) {
+    view?.setBorderWidth(width)
+  }
+
+  @ReactProp(name = "squircleBoxShadow")
+  override fun setSquircleBoxShadow(view: ResquircleView?, boxShadow: String?) {
+    view?.setSquircleBoxShadow(boxShadow)
+  }
+
+  @ReactProp(name = "borderRadius", defaultFloat = 0f)
+  override fun setBorderRadius(view: ResquircleView?, radius: Float) {
+    view?.setBorderRadius(radius)
+  }
+
+  @ReactProp(name = "cornerSmoothing", defaultFloat = 0.6f)
+  override fun setCornerSmoothing(view: ResquircleView?, smoothing: Float) {
+    view?.setCornerSmoothing(smoothing)
+  }
+
+  @ReactProp(name = "overflow")
+  override fun setOverflow(view: ResquircleView?, overflow: String?) {
+    view?.setOverflow(overflow)
   }
 
   companion object {
