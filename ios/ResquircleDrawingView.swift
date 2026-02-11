@@ -1,22 +1,23 @@
 import UIKit
 
-private final class SquircleMaskView: UIView {
-  override class var layerClass: AnyClass { CAShapeLayer.self }
-  var shapeLayer: CAShapeLayer { layer as! CAShapeLayer }
-}
-
 @objc(ResquircleDrawingView)
 public final class ResquircleDrawingView: UIView {
-  private let squircleLayer = CAShapeLayer()
+  private let fillLayer = CAShapeLayer()
+  private let borderLayer = CAShapeLayer()
   private var shadowLayers: [CAShapeLayer] = []
   private var shadowSpecs: [ShadowSpec] = []
-  private var squircleMaskView: SquircleMaskView? = nil
+  private var clippingMaskLayer: CAShapeLayer? = nil
+
+  private let childrenContainer = UIView()
+  @objc public var reactContentView: UIView { childrenContainer }
 
   /// When false, the view renders shadows only (no fill/border),
   /// but still keeps paths/masks in sync.
   @objc public var drawSquircleLayer: Bool = true {
     didSet {
-      squircleLayer.opacity = drawSquircleLayer ? 1 : 0
+      let opacity: Float = drawSquircleLayer ? 1 : 0
+      fillLayer.opacity = opacity
+      borderLayer.opacity = opacity
     }
   }
 
@@ -64,8 +65,8 @@ public final class ResquircleDrawingView: UIView {
     didSet { setCornerSmoothing(cornerSmoothing) }
   }
 
-  @objc public var overflow: NSString? = "visible" {
-    didSet { updateOverflow() }
+  @objc public var clipContent: Bool = false {
+    didSet { updateClipping() }
   }
 
   public override init(frame: CGRect) {
@@ -79,16 +80,39 @@ public final class ResquircleDrawingView: UIView {
   }
 
   private func setupSquircleLayer() {
+    // Prevent UIKit from treating this view as opaque and compositing a black backdrop.
+    isOpaque = false
+    backgroundColor = .clear
+
     layer.masksToBounds = false
-    squircleLayer.contentsScale = UIScreen.main.scale
-    squircleLayer.lineJoin = .round
-    squircleLayer.lineCap = .round
-    squircleLayer.allowsEdgeAntialiasing = true
-    // Keep squircle drawing behind Fabric children (text/images/etc).
-    // Fabric may insert child layers in ways that can end up underneath
-    // manually-added layers unless we force this to the back.
-    layer.insertSublayer(squircleLayer, at: 0)
-    squircleLayer.opacity = drawSquircleLayer ? 1 : 0
+    fillLayer.contentsScale = UIScreen.main.scale
+    fillLayer.allowsEdgeAntialiasing = true
+    // Fill layer should only fill.
+    fillLayer.strokeColor = nil
+
+    borderLayer.contentsScale = UIScreen.main.scale
+    borderLayer.lineJoin = .round
+    borderLayer.lineCap = .round
+    borderLayer.allowsEdgeAntialiasing = true
+    // Border layer should only stroke (default fill is black -> would cover children).
+    borderLayer.fillColor = nil
+
+    // Host Fabric children in a dedicated container so we can clip ONLY children,
+    // while keeping fill/border layers un-clipped and borders always on top.
+    childrenContainer.backgroundColor = .clear
+    childrenContainer.isOpaque = false
+    childrenContainer.clipsToBounds = false
+    childrenContainer.isUserInteractionEnabled = true
+    addSubview(childrenContainer)
+
+    // Fill at the very back.
+    layer.insertSublayer(fillLayer, at: 0)
+    // Border should always be on top of children.
+    layer.addSublayer(borderLayer)
+
+    let opacity: Float = drawSquircleLayer ? 1 : 0
+    fillLayer.opacity = opacity
+    borderLayer.opacity = opacity
 
     // Apply defaults
     setBackgroundColor(squircleBackgroundColor)
@@ -99,12 +123,21 @@ public final class ResquircleDrawingView: UIView {
   public override func layoutSubviews() {
     super.layoutSubviews()
 
-    // Make sure squircle stays behind children even if Fabric inserts layers later.
-    if squircleLayer.superlayer === layer,
+    childrenContainer.frame = bounds
+
+    // Keep fill behind everything.
+    if fillLayer.superlayer === layer,
        let sublayers = layer.sublayers,
-       sublayers.first !== squircleLayer {
-      squircleLayer.removeFromSuperlayer()
-      layer.insertSublayer(squircleLayer, at: 0)
+       sublayers.first !== fillLayer {
+      fillLayer.removeFromSuperlayer()
+      layer.insertSublayer(fillLayer, at: 0)
+    }
+    // Keep border on top of children.
+    if borderLayer.superlayer === layer,
+       let sublayers = layer.sublayers,
+       sublayers.last !== borderLayer {
+      borderLayer.removeFromSuperlayer()
+      layer.addSublayer(borderLayer)
     }
 
     // If, for any reason, the Fabric prop didn't arrive, fall back to the parent
@@ -116,9 +149,12 @@ public final class ResquircleDrawingView: UIView {
       }
     }
 
-    squircleLayer.frame = bounds
-    let fillPath = cachedFillPath()
-    squircleLayer.path = fillPath
+    fillLayer.frame = bounds
+    borderLayer.frame = bounds
+
+    let path = cachedFillPath()
+    fillLayer.path = path
+    borderLayer.path = path
     updateShadowPaths()
 
     // Keep the clipping mask in sync with bounds/radius changes.
@@ -126,25 +162,27 @@ public final class ResquircleDrawingView: UIView {
   }
 
   private func cachedFillPath() -> CGPath {
+    let borderWidth = borderLayer.lineWidth
     let key =
       PathCacheKey(
         width: bounds.width,
         height: bounds.height,
         radius: radius,
         cornerSmoothing: cornerSmoothingInternal,
-        lineWidth: squircleLayer.lineWidth
+        lineWidth: borderWidth
       )
     if key == lastFillKey, let path = lastFillPath {
       return path
     }
-    let path = createSquirclePath(insetBy: squircleLayer.lineWidth, radius: radius)
+    // Path inset by borderWidth so border stroke stays inside bounds.
+    let path = createSquirclePath(insetBy: borderWidth, radius: radius)
     lastFillKey = key
     lastFillPath = path
     return path
   }
 
   private func cachedOuterPath() -> CGPath {
-    let baseRadius = radius + (squircleLayer.lineWidth / 2)
+    let baseRadius = radius + (borderLayer.lineWidth / 2)
     let key =
       PathCacheKey(
         width: bounds.width,
@@ -195,18 +233,18 @@ public final class ResquircleDrawingView: UIView {
   }
 
   private func setBackgroundColor(_ backgroundColor: UIColor) {
-    squircleLayer.fillColor = backgroundColor.cgColor
+    fillLayer.fillColor = backgroundColor.cgColor
     for layer in shadowLayers {
       layer.fillColor = backgroundColor.cgColor
     }
   }
 
   private func setBorderColor(_ borderColor: UIColor) {
-    squircleLayer.strokeColor = borderColor.cgColor
+    borderLayer.strokeColor = borderColor.cgColor
   }
 
   private func setBorderWidth(_ borderWidth: CGFloat) {
-    squircleLayer.lineWidth = borderWidth
+    borderLayer.lineWidth = borderWidth
     invalidatePathCache()
     setNeedsLayout()
   }
@@ -224,30 +262,33 @@ public final class ResquircleDrawingView: UIView {
     setNeedsLayout()
   }
 
-  private func updateOverflow() {
-    let shouldClip = overflow?.lowercased == "hidden"
-    if shouldClip {
-      if squircleMaskView == nil {
-        let mv = SquircleMaskView(frame: bounds)
-        mv.isUserInteractionEnabled = false
-        mv.backgroundColor = .clear
-        mv.shapeLayer.fillColor = UIColor.black.cgColor
-        mv.shapeLayer.contentsScale = UIScreen.main.scale
-        mv.shapeLayer.allowsEdgeAntialiasing = true
-        squircleMaskView = mv
+  private func updateClipping() {
+    if clipContent {
+      if clippingMaskLayer == nil {
+        let l = CAShapeLayer()
+        l.fillColor = UIColor.black.cgColor
+        l.contentsScale = UIScreen.main.scale
+        l.allowsEdgeAntialiasing = true
+        clippingMaskLayer = l
       }
-      self.mask = squircleMaskView
+      // Clip ONLY React children, not fill/border.
+      childrenContainer.layer.mask = clippingMaskLayer
     } else {
-      self.mask = nil
+      childrenContainer.layer.mask = nil
     }
     setNeedsLayout()
   }
 
   private func updateClippingMaskIfNeeded() {
-    guard let mv = squircleMaskView, self.mask === mv else { return }
-    mv.frame = bounds
-    mv.shapeLayer.frame = mv.bounds
-    mv.shapeLayer.path = cachedOuterPath()
+    guard let maskLayer = clippingMaskLayer, childrenContainer.layer.mask === maskLayer else { return }
+
+    let borderWidth = borderLayer.lineWidth
+    let inset = max(0, 2 * borderWidth)
+    let innerRadius = max(0, radius - borderWidth)
+
+    maskLayer.frame = childrenContainer.bounds
+    // Clip children to the INNER squircle so borders remain visible and not covered.
+    maskLayer.path = createSquirclePath(insetBy: inset, radius: innerRadius)
   }
 }
 
@@ -278,7 +319,7 @@ private extension ResquircleDrawingView {
       let l = CAShapeLayer()
       l.contentsScale = UIScreen.main.scale
       l.frame = bounds
-      l.fillColor = squircleLayer.fillColor
+      l.fillColor = fillLayer.fillColor
       l.strokeColor = nil
       l.lineWidth = 0
       l.masksToBounds = false
@@ -288,7 +329,7 @@ private extension ResquircleDrawingView {
       l.shadowRadius = max(0, spec.blur)
       l.shadowOffset = spec.offset
 
-      layer.insertSublayer(l, below: squircleLayer)
+      layer.insertSublayer(l, below: fillLayer)
       shadowLayers.append(l)
     }
   }
@@ -296,7 +337,7 @@ private extension ResquircleDrawingView {
   func updateShadowPaths() {
     guard !shadowLayers.isEmpty, shadowLayers.count == shadowSpecs.count else { return }
 
-    let baseRadius = radius + (squircleLayer.lineWidth / 2)
+    let baseRadius = radius + (borderLayer.lineWidth / 2)
     let basePath = cachedOuterPath()
 
     for (index, l) in shadowLayers.enumerated() {

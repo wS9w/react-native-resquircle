@@ -41,7 +41,7 @@ using namespace facebook::react;
     // Shadow view: draws shadows without being clipped by overflow.
     _shadowView = [[ResquircleDrawingView alloc] init];
     _shadowView.drawSquircleLayer = NO;
-    _shadowView.overflow = @"visible";
+    _shadowView.clipContent = NO;
 
     self.contentView = _contentView;
     [self insertSubview:_shadowView belowSubview:self.contentView];
@@ -108,13 +108,10 @@ using namespace facebook::react;
         _contentView.squircleBoxShadow = nil;
     }
 
-    if (oldViewProps.overflow != newViewProps.overflow) {
-        NSString *overflow = newViewProps.overflow.empty()
-          ? nil
-          : [NSString stringWithUTF8String:newViewProps.overflow.c_str()];
+    if (oldViewProps.clipContent != newViewProps.clipContent) {
         // Clip only content (and its children). Keep shadow un-clipped.
-        _contentView.overflow = overflow;
-        _shadowView.overflow = @"visible";
+        _contentView.clipContent = newViewProps.clipContent;
+        _shadowView.clipContent = NO;
     }
 
     [super updateProps:props oldProps:oldProps];
@@ -124,9 +121,9 @@ using namespace facebook::react;
 // Ensure children are mounted inside `_contentView` so they participate in squircle clipping.
 - (void)mountChildComponentView:(UIView<RCTComponentViewProtocol> *)childComponentView index:(NSInteger)index
 {
-  // `_contentView` is our actual container that has the squircle mask when overflow="hidden".
-  // Mounting children there ensures proper clipping and layering.
-  [_contentView insertSubview:childComponentView atIndex:index];
+  // Mount Fabric children inside the dedicated container that we clip (not the whole view),
+  // so borders can stay on top and shadows can remain visible.
+  [_contentView.reactContentView insertSubview:childComponentView atIndex:index];
 }
 
 - (void)unmountChildComponentView:(UIView<RCTComponentViewProtocol> *)childComponentView index:(NSInteger)index

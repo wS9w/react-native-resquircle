@@ -21,7 +21,7 @@ const DEFAULT_CORNER_SMOOTHING = 0.6;
 type InternalResquircleOverlayProps = {
   cornerSmoothing?: number;
   borderRadius?: number;
-  overflow?: 'visible' | 'hidden';
+  clipContent?: boolean;
   squircleBoxShadow?: string;
   squircleBackgroundColor?: ColorValue;
   squircleBorderColor?: ColorValue;
@@ -32,7 +32,7 @@ const ResquircleNativeOverlay = (props: InternalResquircleOverlayProps) => {
   const {
     cornerSmoothing,
     borderRadius,
-    overflow,
+    clipContent,
     squircleBoxShadow,
     squircleBackgroundColor,
     squircleBorderColor,
@@ -48,7 +48,7 @@ const ResquircleNativeOverlay = (props: InternalResquircleOverlayProps) => {
       squircleBoxShadow={squircleBoxShadow}
       borderRadius={borderRadius}
       cornerSmoothing={cornerSmoothing}
-      overflow={overflow}
+      clipContent={clipContent}
       style={StyleSheet.absoluteFill}
       pointerEvents="none"
     />
@@ -266,7 +266,7 @@ const useResquircleProps = (
         cornerSmoothing !== undefined
           ? cornerSmoothing
           : DEFAULT_CORNER_SMOOTHING,
-      overflow: resolvedOverflow,
+      clipContent: resolvedOverflow === 'hidden',
       squircleBoxShadow: derivedSquircleBoxShadow,
     }),
     [
