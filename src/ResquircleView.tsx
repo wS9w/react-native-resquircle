@@ -94,6 +94,25 @@ export const ResquircleButton = React.forwardRef<View, ResquircleButtonProps>(
     const { nativeProps, contentStyle, restProps } =
       useResquircleProps(props);
 
+    if (Platform.OS === 'ios') {
+      // iOS: use the native view as the container so overflow="hidden"
+      // clips children to the squircle shape (not a rectangle).
+      return (
+        <Pressable ref={ref} {...restProps}>
+          {({ pressed }) => (
+            <NativeResquircleView
+              {...nativeProps}
+              style={[contentStyle, pressed && { opacity: activeOpacity }]}
+            >
+              {typeof children === 'function'
+                ? children({ pressed })
+                : children}
+            </NativeResquircleView>
+          )}
+        </Pressable>
+      );
+    }
+
     return (
       <Pressable
         ref={ref}
@@ -270,6 +289,8 @@ const useResquircleProps = (
         borderWidth: 0,
         borderColor: 'transparent',
         backgroundColor: 'transparent',
+        // iOS: don't clip at the root level, or shadows get cut off.
+        ...(Platform.OS === 'ios' ? { overflow: 'visible' } : null),
         ...(boxShadow != null ? { boxShadow: undefined } : null),
         ...(shadowColor != null ? { shadowColor: undefined } : null),
         ...(shadowOpacity != null ? { shadowOpacity: undefined } : null),

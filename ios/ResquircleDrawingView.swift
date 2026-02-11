@@ -1,10 +1,16 @@
 import UIKit
 
+private final class SquircleMaskView: UIView {
+  override class var layerClass: AnyClass { CAShapeLayer.self }
+  var shapeLayer: CAShapeLayer { layer as! CAShapeLayer }
+}
+
 @objc(ResquircleDrawingView)
 public final class ResquircleDrawingView: UIView {
   private let squircleLayer = CAShapeLayer()
   private var shadowLayers: [CAShapeLayer] = []
   private var shadowSpecs: [ShadowSpec] = []
+  private var squircleMaskView: SquircleMaskView? = nil
 
   /// When false, the view renders shadows only (no fill/border),
   /// but still keeps paths/masks in sync.
@@ -92,6 +98,14 @@ public final class ResquircleDrawingView: UIView {
 
   public override func layoutSubviews() {
     super.layoutSubviews()
+
+    // Make sure squircle stays behind children even if Fabric inserts layers later.
+    if squircleLayer.superlayer === layer,
+       let sublayers = layer.sublayers,
+       sublayers.first !== squircleLayer {
+      squircleLayer.removeFromSuperlayer()
+      layer.insertSublayer(squircleLayer, at: 0)
+    }
 
     // If, for any reason, the Fabric prop didn't arrive, fall back to the parent
     // container's cornerRadius (JS wrapper still applies borderRadius there).
@@ -212,23 +226,28 @@ public final class ResquircleDrawingView: UIView {
 
   private func updateOverflow() {
     let shouldClip = overflow?.lowercased == "hidden"
-    // For this native overlay view, overflow only affects its own drawing.
-    // Clipping the view itself is the most intuitive behavior.
-    layer.mask = shouldClip ? clippingMaskLayer() : nil
+    if shouldClip {
+      if squircleMaskView == nil {
+        let mv = SquircleMaskView(frame: bounds)
+        mv.isUserInteractionEnabled = false
+        mv.backgroundColor = .clear
+        mv.shapeLayer.fillColor = UIColor.black.cgColor
+        mv.shapeLayer.contentsScale = UIScreen.main.scale
+        mv.shapeLayer.allowsEdgeAntialiasing = true
+        squircleMaskView = mv
+      }
+      self.mask = squircleMaskView
+    } else {
+      self.mask = nil
+    }
     setNeedsLayout()
   }
 
-  private func clippingMaskLayer() -> CAShapeLayer {
-    let mask = CAShapeLayer()
-    mask.frame = bounds
-    mask.path = cachedOuterPath()
-    return mask
-  }
-
   private func updateClippingMaskIfNeeded() {
-    guard let mask = layer.mask as? CAShapeLayer else { return }
-    mask.frame = bounds
-    mask.path = cachedOuterPath()
+    guard let mv = squircleMaskView, self.mask === mv else { return }
+    mv.frame = bounds
+    mv.shapeLayer.frame = mv.bounds
+    mv.shapeLayer.path = cachedOuterPath()
   }
 }
 

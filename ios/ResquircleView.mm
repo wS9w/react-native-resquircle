@@ -1,6 +1,7 @@
 #import "ResquircleView.h"
 
 #import <React/RCTConversions.h>
+#import <React/RCTComponentViewProtocol.h>
 
 #import <react/renderer/components/ResquircleViewSpec/ComponentDescriptors.h>
 #import <react/renderer/components/ResquircleViewSpec/Props.h>
@@ -29,6 +30,11 @@ using namespace facebook::react;
   if (self = [super initWithFrame:frame]) {
     static const auto defaultProps = std::make_shared<const ResquircleViewProps>();
     _props = defaultProps;
+
+    // Never clip at the root level: we want shadows to be able to render
+    // outside bounds even when overflow="hidden" is used for content clipping.
+    self.clipsToBounds = NO;
+    self.layer.masksToBounds = NO;
 
     // Content view: hosts Fabric children + draws fill/border and applies clipping mask.
     _contentView = [[ResquircleDrawingView alloc] init];
@@ -112,6 +118,20 @@ using namespace facebook::react;
     }
 
     [super updateProps:props oldProps:oldProps];
+}
+
+// MARK: - Child mounting (Fabric)
+// Ensure children are mounted inside `_contentView` so they participate in squircle clipping.
+- (void)mountChildComponentView:(UIView<RCTComponentViewProtocol> *)childComponentView index:(NSInteger)index
+{
+  // `_contentView` is our actual container that has the squircle mask when overflow="hidden".
+  // Mounting children there ensures proper clipping and layering.
+  [_contentView insertSubview:childComponentView atIndex:index];
+}
+
+- (void)unmountChildComponentView:(UIView<RCTComponentViewProtocol> *)childComponentView index:(NSInteger)index
+{
+  [childComponentView removeFromSuperview];
 }
 
 @end
