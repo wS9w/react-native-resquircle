@@ -6,6 +6,14 @@ public final class ResquircleDrawingView: UIView {
   private var shadowLayers: [CAShapeLayer] = []
   private var shadowSpecs: [ShadowSpec] = []
 
+  /// When false, the view renders shadows only (no fill/border),
+  /// but still keeps paths/masks in sync.
+  @objc public var drawSquircleLayer: Bool = true {
+    didSet {
+      squircleLayer.opacity = drawSquircleLayer ? 1 : 0
+    }
+  }
+
   private var radius: CGFloat = 0
   private var cornerSmoothingInternal: CGFloat = 0
   private var didReceiveBorderRadiusProp: Bool = false
@@ -70,7 +78,11 @@ public final class ResquircleDrawingView: UIView {
     squircleLayer.lineJoin = .round
     squircleLayer.lineCap = .round
     squircleLayer.allowsEdgeAntialiasing = true
-    layer.addSublayer(squircleLayer)
+    // Keep squircle drawing behind Fabric children (text/images/etc).
+    // Fabric may insert child layers in ways that can end up underneath
+    // manually-added layers unless we force this to the back.
+    layer.insertSublayer(squircleLayer, at: 0)
+    squircleLayer.opacity = drawSquircleLayer ? 1 : 0
 
     // Apply defaults
     setBackgroundColor(squircleBackgroundColor)

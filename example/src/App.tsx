@@ -22,6 +22,21 @@ export default function App() {
         <Text style={styles.subtitle}>Native iOS + Android</Text>
       </ResquircleView>
 
+      <Text style={styles.sectionTitle}>Overflow hidden (clip)</Text>
+      <ResquircleView
+        cornerSmoothing={1}
+        overflow="hidden"
+        style={[styles.card, { backgroundColor: 'rgb(67, 67, 12)'} ,]}
+      >
+        <View style={styles.overflowRow}>
+          <View style={styles.overflowBlob} />
+          <Text style={styles.title}>Clipped blob</Text>
+        </View>
+        <Text style={styles.subtitle}>
+          This big circle should be clipped by squircle.
+        </Text>
+      </ResquircleView>
+
       <Text style={styles.sectionTitle}>Button</Text>
       <ResquircleButton
         cornerSmoothing={1}
@@ -88,6 +103,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     justifyContent: 'center',
     paddingHorizontal: 16,
+  },
+  overflowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  overflowBlob: {
+    position: 'absolute',
+    right: -40,
+    top: -40,
+    width: 140,
+    height: 140,
+    borderRadius: 999,
+    backgroundColor: '#4F46E5',
+    opacity: 0.6,
   },
   title: {
     fontSize: 18,

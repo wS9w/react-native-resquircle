@@ -1,5 +1,6 @@
 import * as React from 'react';
 import {
+  Platform,
   Pressable,
   StyleSheet,
   View,
@@ -19,31 +20,31 @@ const DEFAULT_CORNER_SMOOTHING = 0.6;
 
 type InternalResquircleOverlayProps = {
   cornerSmoothing?: number;
-  backgroundColor?: ColorValue;
   borderRadius?: number;
-  borderColor?: ColorValue;
-  borderWidth?: number;
   overflow?: 'visible' | 'hidden';
   squircleBoxShadow?: string;
+  squircleBackgroundColor?: ColorValue;
+  squircleBorderColor?: ColorValue;
+  squircleBorderWidth?: number;
 };
 
 const ResquircleNativeOverlay = (props: InternalResquircleOverlayProps) => {
   const {
     cornerSmoothing,
-    backgroundColor,
     borderRadius,
-    borderColor,
-    borderWidth,
     overflow,
     squircleBoxShadow,
+    squircleBackgroundColor,
+    squircleBorderColor,
+    squircleBorderWidth,
   } = props;
 
   return (
     <NativeResquircleView
       // Fabric/codegen: pass ColorValue, native will convert.
-      squircleBackgroundColor={backgroundColor}
-      squircleBorderColor={borderColor}
-      squircleBorderWidth={borderWidth}
+      squircleBackgroundColor={squircleBackgroundColor}
+      squircleBorderColor={squircleBorderColor}
+      squircleBorderWidth={squircleBorderWidth}
       squircleBoxShadow={squircleBoxShadow}
       borderRadius={borderRadius}
       cornerSmoothing={cornerSmoothing}
@@ -59,12 +60,27 @@ export const ResquircleView = React.forwardRef<
   ViewProps & ResquircleViewProps
 >((props, ref) => {
   const { children } = props;
-  const { resquircleProps, contentStyle, restProps } =
+  const { nativeProps, contentStyle, restProps } =
     useResquircleProps(props);
 
+  if (Platform.OS === 'ios') {
+    // iOS native view is a real container; it can clip children to the squircle.
+    return (
+      <NativeResquircleView
+        ref={ref}
+        {...nativeProps}
+        style={contentStyle}
+        {...restProps}
+      >
+        {children}
+      </NativeResquircleView>
+    );
+  }
+
+  // Android native view is drawing-only (not a ViewGroup). Keep JS wrapper container.
   return (
     <View ref={ref} style={contentStyle} {...restProps}>
-      <ResquircleNativeOverlay {...resquircleProps} />
+      <ResquircleNativeOverlay {...nativeProps} />
       {children}
     </View>
   );
@@ -75,7 +91,7 @@ ResquircleView.displayName = 'ResquircleView';
 export const ResquircleButton = React.forwardRef<View, ResquircleButtonProps>(
   (props, ref) => {
     const { children, activeOpacity = 0.85 } = props;
-    const { resquircleProps, contentStyle, restProps } =
+    const { nativeProps, contentStyle, restProps } =
       useResquircleProps(props);
 
     return (
@@ -89,7 +105,7 @@ export const ResquircleButton = React.forwardRef<View, ResquircleButtonProps>(
       >
         {({ pressed }) => (
           <>
-            <ResquircleNativeOverlay {...resquircleProps} />
+            <ResquircleNativeOverlay {...nativeProps} />
             {typeof children === 'function' ? children({ pressed }) : children}
           </>
         )}
@@ -106,6 +122,8 @@ const useResquircleProps = (
   const { cornerSmoothing, overflow, style, ...restProps } = props as any;
 
   const flattenedStyle = style ? StyleSheet.flatten(style) : undefined;
+  const resolvedOverflow =
+    overflow ?? (flattenedStyle as any)?.overflow ?? 'visible';
 
   const {
     // shadow styles
@@ -218,27 +236,28 @@ const useResquircleProps = (
     paddingTop,
   ]);
 
-  const resquircleProps = React.useMemo(
+  const nativeProps = React.useMemo(
     () => ({
       borderRadius: flattenedStyle?.borderRadius ?? 0,
-      borderWidth: flattenedStyle?.borderWidth ?? 0,
-      backgroundColor: flattenedStyle?.backgroundColor ?? 'transparent',
-      borderColor: flattenedStyle?.borderColor ?? 'transparent',
+      squircleBorderWidth: flattenedStyle?.borderWidth ?? 0,
+      squircleBackgroundColor:
+        flattenedStyle?.backgroundColor ?? 'transparent',
+      squircleBorderColor: flattenedStyle?.borderColor ?? 'transparent',
       cornerSmoothing:
         cornerSmoothing !== undefined
           ? cornerSmoothing
           : DEFAULT_CORNER_SMOOTHING,
-      overflow: overflow ?? 'visible',
+      overflow: resolvedOverflow,
       squircleBoxShadow: derivedSquircleBoxShadow,
     }),
     [
       cornerSmoothing,
-      overflow,
+      resolvedOverflow,
       derivedSquircleBoxShadow,
       flattenedStyle?.borderRadius,
-      flattenedStyle?.borderWidth,
       flattenedStyle?.backgroundColor,
       flattenedStyle?.borderColor,
+      flattenedStyle?.borderWidth,
     ]
   );
 
@@ -272,7 +291,7 @@ const useResquircleProps = (
   );
 
   return {
-    resquircleProps,
+    nativeProps,
     contentStyle,
     restProps,
   };

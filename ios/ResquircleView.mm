@@ -15,7 +15,8 @@ using namespace facebook::react;
 #endif
 
 @implementation ResquircleView {
-    ResquircleDrawingView * _view;
+    ResquircleDrawingView * _contentView;
+    ResquircleDrawingView * _shadowView;
 }
 
 + (ComponentDescriptorProvider)componentDescriptorProvider
@@ -29,9 +30,15 @@ using namespace facebook::react;
     static const auto defaultProps = std::make_shared<const ResquircleViewProps>();
     _props = defaultProps;
 
-    _view = [[ResquircleDrawingView alloc] init];
+    // Content view: hosts Fabric children + draws fill/border and applies clipping mask.
+    _contentView = [[ResquircleDrawingView alloc] init];
+    // Shadow view: draws shadows without being clipped by overflow.
+    _shadowView = [[ResquircleDrawingView alloc] init];
+    _shadowView.drawSquircleLayer = NO;
+    _shadowView.overflow = @"visible";
 
-    self.contentView = _view;
+    self.contentView = _contentView;
+    [self insertSubview:_shadowView belowSubview:self.contentView];
   }
 
   return self;
@@ -40,7 +47,8 @@ using namespace facebook::react;
 - (void)layoutSubviews
 {
   [super layoutSubviews];
-  _view.frame = self.bounds;
+  _shadowView.frame = self.bounds;
+  _contentView.frame = self.bounds;
 }
 
 - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps
@@ -50,41 +58,57 @@ using namespace facebook::react;
 
     // Back-compat
     if (oldViewProps.color != newViewProps.color) {
-        _view.squircleBackgroundColor = RCTUIColorFromSharedColor(newViewProps.color);
+        UIColor *c = RCTUIColorFromSharedColor(newViewProps.color);
+        _contentView.squircleBackgroundColor = c;
+        _shadowView.squircleBackgroundColor = c;
     }
 
     if (oldViewProps.squircleBackgroundColor != newViewProps.squircleBackgroundColor) {
-        _view.squircleBackgroundColor = RCTUIColorFromSharedColor(newViewProps.squircleBackgroundColor);
+        UIColor *c = RCTUIColorFromSharedColor(newViewProps.squircleBackgroundColor);
+        _contentView.squircleBackgroundColor = c;
+        _shadowView.squircleBackgroundColor = c;
     }
 
     if (oldViewProps.squircleBorderColor != newViewProps.squircleBorderColor) {
-        _view.squircleBorderColor = RCTUIColorFromSharedColor(newViewProps.squircleBorderColor);
+        UIColor *c = RCTUIColorFromSharedColor(newViewProps.squircleBorderColor);
+        _contentView.squircleBorderColor = c;
+        _shadowView.squircleBorderColor = c;
     }
 
     if (oldViewProps.squircleBorderWidth != newViewProps.squircleBorderWidth) {
-        _view.squircleBorderWidth = newViewProps.squircleBorderWidth;
+        CGFloat w = newViewProps.squircleBorderWidth;
+        _contentView.squircleBorderWidth = w;
+        _shadowView.squircleBorderWidth = w;
     }
 
     if (oldViewProps.borderRadius != newViewProps.borderRadius) {
-        _view.borderRadius = newViewProps.borderRadius;
+        CGFloat r = newViewProps.borderRadius;
+        _contentView.borderRadius = r;
+        _shadowView.borderRadius = r;
     }
 
     if (oldViewProps.cornerSmoothing != newViewProps.cornerSmoothing) {
-        _view.cornerSmoothing = newViewProps.cornerSmoothing;
+        CGFloat s = newViewProps.cornerSmoothing;
+        _contentView.cornerSmoothing = s;
+        _shadowView.cornerSmoothing = s;
     }
 
     if (oldViewProps.squircleBoxShadow != newViewProps.squircleBoxShadow) {
         NSString *shadow = newViewProps.squircleBoxShadow.empty()
           ? nil
           : [NSString stringWithUTF8String:newViewProps.squircleBoxShadow.c_str()];
-        _view.squircleBoxShadow = shadow;
+        // Shadows should stay visible even when content is clipped.
+        _shadowView.squircleBoxShadow = shadow;
+        _contentView.squircleBoxShadow = nil;
     }
 
     if (oldViewProps.overflow != newViewProps.overflow) {
         NSString *overflow = newViewProps.overflow.empty()
           ? nil
           : [NSString stringWithUTF8String:newViewProps.overflow.c_str()];
-        _view.overflow = overflow;
+        // Clip only content (and its children). Keep shadow un-clipped.
+        _contentView.overflow = overflow;
+        _shadowView.overflow = @"visible";
     }
 
     [super updateProps:props oldProps:oldProps];
