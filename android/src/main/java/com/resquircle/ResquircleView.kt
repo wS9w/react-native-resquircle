@@ -6,13 +6,14 @@ import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
-import android.view.View
+import com.facebook.react.views.view.ReactViewGroup
 import kotlin.math.roundToInt
 
-class ResquircleView(context: Context) : View(context) {
+class ResquircleView(context: Context) : ReactViewGroup(context) {
   private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
   private val borderPaint = Paint(paint)
-  private val path = Path()
+  private val path = Path() // fill/border path
+  private val clipPath = Path() // inner clip for children
   private var shadowSpecs: List<ShadowSpec> = emptyList()
   private var shadowPaints: List<Paint> = emptyList()
   private var shadowPaths: List<Path> = emptyList()
@@ -23,7 +24,7 @@ class ResquircleView(context: Context) : View(context) {
   private var backgroundColorInt = 0x00000000
   private var borderRadius = 0f // px
   private var boxShadowString: String? = null
-  private var overflow: String = "visible"
+  private var clipContent: Boolean = false
 
   init {
     paint.color = backgroundColorInt
@@ -34,6 +35,18 @@ class ResquircleView(context: Context) : View(context) {
     borderPaint.strokeJoin = Paint.Join.ROUND
     borderPaint.strokeCap = Paint.Cap.ROUND
     setWillNotDraw(false)
+  }
+
+  override fun dispatchDraw(canvas: Canvas) {
+    if (!clipContent) {
+      super.dispatchDraw(canvas)
+      return
+    }
+
+    val checkpoint = canvas.save()
+    canvas.clipPath(clipPath)
+    super.dispatchDraw(canvas)
+    canvas.restoreToCount(checkpoint)
   }
 
   override fun onDraw(canvas: Canvas) {
@@ -58,10 +71,10 @@ class ResquircleView(context: Context) : View(context) {
 
   override fun onSizeChanged(newWidth: Int, newHeight: Int, oldWidth: Int, oldHeight: Int) {
     super.onSizeChanged(newWidth, newHeight, oldWidth, oldHeight)
-    resetSquirclePath(newWidth.toFloat(), newHeight.toFloat())
+    resetPaths(newWidth.toFloat(), newHeight.toFloat())
   }
 
-  private fun resetSquirclePath(width: Float, height: Float) {
+  private fun resetPaths(width: Float, height: Float) {
     if (width == 0f || height == 0f) return
 
     val pixelBorderWidth = Utils.convertDpToPixel(this.borderWidth, context)
@@ -96,18 +109,29 @@ class ResquircleView(context: Context) : View(context) {
 
     path.reset()
     path.addPath(translatedPath)
+
+    // Clip children to the inner edge of the border stroke.
+    val innerInset = pixelBorderWidth
+    val innerRadius = (borderRadius - pixelBorderWidth).coerceAtLeast(0f)
+    val innerW = (width - 2f * innerInset).coerceAtLeast(0f)
+    val innerH = (height - 2f * innerInset).coerceAtLeast(0f)
+    val innerSquircle = SquirclePath(innerW, innerH, innerRadius, cornerSmoothing)
+    val innerMatrix = Matrix().apply { setTranslate(innerInset, innerInset) }
+    val translatedInner = Path().apply { innerSquircle.transform(innerMatrix, this) }
+    clipPath.reset()
+    clipPath.addPath(translatedInner)
   }
 
   fun setCornerSmoothing(c: Float) {
     cornerSmoothing = c
-    resetSquirclePath(width.toFloat(), height.toFloat())
+    resetPaths(width.toFloat(), height.toFloat())
     invalidate()
   }
 
-  fun setBorderRadius(b: Float) {
+  fun setSquircleBorderRadius(b: Float) {
     val pixelRadius = Utils.convertDpToPixel(b, context)
     borderRadius = pixelRadius
-    resetSquirclePath(width.toFloat(), height.toFloat())
+    resetPaths(width.toFloat(), height.toFloat())
     invalidate()
   }
 
@@ -125,7 +149,7 @@ class ResquircleView(context: Context) : View(context) {
 
   fun setBorderWidth(width: Float) {
     borderWidth = width
-    resetSquirclePath(this.width.toFloat(), this.height.toFloat())
+    resetPaths(this.width.toFloat(), this.height.toFloat())
     invalidate()
   }
 
@@ -135,10 +159,9 @@ class ResquircleView(context: Context) : View(context) {
     invalidate()
   }
 
-  fun setOverflow(value: String?) {
-    overflow = value ?: "visible"
-    // NOTE: This only affects the native view itself (it has no children).
-    clipToOutline = overflow == "hidden"
+  fun setClipContent(value: Boolean) {
+    clipContent = value
+    resetPaths(width.toFloat(), height.toFloat())
     invalidate()
   }
 
@@ -164,7 +187,7 @@ class ResquircleView(context: Context) : View(context) {
         }
       }
 
-    resetSquirclePath(width.toFloat(), height.toFloat())
+    resetPaths(width.toFloat(), height.toFloat())
   }
 
   private data class ShadowSpec(

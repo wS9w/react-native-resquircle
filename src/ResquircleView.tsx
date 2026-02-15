@@ -1,6 +1,5 @@
 import * as React from 'react';
 import {
-  Platform,
   Pressable,
   StyleSheet,
   View,
@@ -18,43 +17,6 @@ import type {
 
 const DEFAULT_CORNER_SMOOTHING = 0.6;
 
-type InternalResquircleOverlayProps = {
-  cornerSmoothing?: number;
-  borderRadius?: number;
-  clipContent?: boolean;
-  squircleBoxShadow?: string;
-  squircleBackgroundColor?: ColorValue;
-  squircleBorderColor?: ColorValue;
-  squircleBorderWidth?: number;
-};
-
-const ResquircleNativeOverlay = (props: InternalResquircleOverlayProps) => {
-  const {
-    cornerSmoothing,
-    borderRadius,
-    clipContent,
-    squircleBoxShadow,
-    squircleBackgroundColor,
-    squircleBorderColor,
-    squircleBorderWidth,
-  } = props;
-
-  return (
-    <NativeResquircleView
-      // Fabric/codegen: pass ColorValue, native will convert.
-      squircleBackgroundColor={squircleBackgroundColor}
-      squircleBorderColor={squircleBorderColor}
-      squircleBorderWidth={squircleBorderWidth}
-      squircleBoxShadow={squircleBoxShadow}
-      borderRadius={borderRadius}
-      cornerSmoothing={cornerSmoothing}
-      clipContent={clipContent}
-      style={StyleSheet.absoluteFill}
-      pointerEvents="none"
-    />
-  );
-};
-
 export const ResquircleView = React.forwardRef<
   View,
   ViewProps & ResquircleViewProps
@@ -63,26 +25,15 @@ export const ResquircleView = React.forwardRef<
   const { nativeProps, contentStyle, restProps } =
     useResquircleProps(props);
 
-  if (Platform.OS === 'ios') {
-    // iOS native view is a real container; it can clip children to the squircle.
-    return (
-      <NativeResquircleView
-        ref={ref}
-        {...nativeProps}
-        style={contentStyle}
-        {...restProps}
-      >
-        {children}
-      </NativeResquircleView>
-    );
-  }
-
-  // Android native view is drawing-only (not a ViewGroup). Keep JS wrapper container.
   return (
-    <View ref={ref} style={contentStyle} {...restProps}>
-      <ResquircleNativeOverlay {...nativeProps} />
+    <NativeResquircleView
+      ref={ref}
+      {...nativeProps}
+      style={contentStyle}
+      {...restProps}
+    >
       {children}
-    </View>
+    </NativeResquircleView>
   );
 });
 
@@ -94,39 +45,18 @@ export const ResquircleButton = React.forwardRef<View, ResquircleButtonProps>(
     const { nativeProps, contentStyle, restProps } =
       useResquircleProps(props);
 
-    if (Platform.OS === 'ios') {
-      // iOS: use the native view as the container so overflow="hidden"
-      // clips children to the squircle shape (not a rectangle).
-      return (
-        <Pressable ref={ref} {...restProps}>
-          {({ pressed }) => (
-            <NativeResquircleView
-              {...nativeProps}
-              style={[contentStyle, pressed && { opacity: activeOpacity }]}
-            >
-              {typeof children === 'function'
-                ? children({ pressed })
-                : children}
-            </NativeResquircleView>
-          )}
-        </Pressable>
-      );
-    }
-
     return (
       <Pressable
         ref={ref}
-        style={({ pressed }) => [
-          contentStyle,
-          pressed && { opacity: activeOpacity },
-        ]}
         {...restProps}
       >
         {({ pressed }) => (
-          <>
-            <ResquircleNativeOverlay {...nativeProps} />
+          <NativeResquircleView
+            {...nativeProps}
+            style={[contentStyle, pressed && { opacity: activeOpacity }]}
+          >
             {typeof children === 'function' ? children({ pressed }) : children}
-          </>
+          </NativeResquircleView>
         )}
       </Pressable>
     );
@@ -289,8 +219,9 @@ const useResquircleProps = (
         borderWidth: 0,
         borderColor: 'transparent',
         backgroundColor: 'transparent',
-        // iOS: don't clip at the root level, or shadows get cut off.
-        ...(Platform.OS === 'ios' ? { overflow: 'visible' } : null),
+        // We do our own squircle clipping; keep the host view overflow visible
+        // so shadows/borders don't get rectangle-clipped by RN.
+        overflow: 'visible',
         ...(boxShadow != null ? { boxShadow: undefined } : null),
         ...(shadowColor != null ? { shadowColor: undefined } : null),
         ...(shadowOpacity != null ? { shadowOpacity: undefined } : null),
