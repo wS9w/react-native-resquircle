@@ -1,12 +1,16 @@
 package com.resquircle
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
 import com.facebook.react.views.view.ReactViewGroup
+import kotlin.math.ceil
+import kotlin.math.roundToInt
 import kotlin.math.roundToInt
 
 class ResquircleView(context: Context) : ReactViewGroup(context) {
@@ -15,8 +19,7 @@ class ResquircleView(context: Context) : ReactViewGroup(context) {
   private val path = Path() // fill/border path
   private val clipPath = Path() // inner clip for children
   private var shadowSpecs: List<ShadowSpec> = emptyList()
-  private var shadowPaints: List<Paint> = emptyList()
-  private var shadowPaths: List<Path> = emptyList()
+  private var shadowRenders: List<ShadowRender> = emptyList()
 
   private var cornerSmoothing = 1.0f
   private var borderColor = 0xFF000000.toInt()
@@ -37,6 +40,12 @@ class ResquircleView(context: Context) : ReactViewGroup(context) {
     setWillNotDraw(false)
   }
 
+  private data class ShadowRender(
+    val bitmap: Bitmap,
+    val drawX: Float,
+    val drawY: Float,
+  )
+
   override fun dispatchDraw(canvas: Canvas) {
     if (!clipContent) {
       super.dispatchDraw(canvas)
@@ -52,10 +61,9 @@ class ResquircleView(context: Context) : ReactViewGroup(context) {
   override fun onDraw(canvas: Canvas) {
     super.onDraw(canvas)
 
-    for (i in shadowPaints.indices) {
-      val shadowPaint = shadowPaints[i]
-      val shadowPath = shadowPaths.getOrNull(i) ?: continue
-      canvas.drawPath(shadowPath, shadowPaint)
+    // Draw shadows behind fill/border (can extend beyond bounds).
+    for (render in shadowRenders) {
+      canvas.drawBitmap(render.bitmap, render.drawX, render.drawY, null)
     }
 
     paint.color = backgroundColorInt
@@ -80,19 +88,7 @@ class ResquircleView(context: Context) : ReactViewGroup(context) {
     val pixelBorderWidth = Utils.convertDpToPixel(this.borderWidth, context)
     val baseRadius = borderRadius + (pixelBorderWidth / 2f)
 
-    shadowPaths =
-      shadowSpecs.map { spec ->
-        val spread = spec.spreadPx
-        val spreadPath =
-          SquirclePath(
-            width + spread * 2,
-            height + spread * 2,
-            baseRadius + spread,
-            cornerSmoothing,
-          )
-        val shiftMatrix = Matrix().apply { setTranslate(-spread, -spread) }
-        Path().apply { spreadPath.transform(shiftMatrix, this) }
-      }
+    rebuildShadowBitmaps(width, height, baseRadius)
 
     val squirclePath =
       SquirclePath(
@@ -122,6 +118,59 @@ class ResquircleView(context: Context) : ReactViewGroup(context) {
     clipPath.addPath(translatedInner)
   }
 
+  private fun rebuildShadowBitmaps(width: Float, height: Float, baseRadius: Float) {
+    // Recycle old bitmaps to avoid leaking.
+    for (r in shadowRenders) {
+      if (!r.bitmap.isRecycled) r.bitmap.recycle()
+    }
+    shadowRenders = emptyList()
+
+    if (shadowSpecs.isEmpty()) return
+
+    shadowRenders =
+      shadowSpecs.mapNotNull { spec ->
+        val spread = spec.spreadPx
+        val blur = spec.blurPx
+
+        // Padding around the content to fit blur + spread.
+        val pad = ceil((kotlin.math.abs(spread) + blur).toDouble()).toInt() + 2
+
+        val innerW = (width + 2f * spread).coerceAtLeast(0f)
+        val innerH = (height + 2f * spread).coerceAtLeast(0f)
+        val radius = (baseRadius + spread).coerceAtLeast(0f)
+
+        val bmpW = (width + 2f * pad).roundToInt().coerceAtLeast(1)
+        val bmpH = (height + 2f * pad).roundToInt().coerceAtLeast(1)
+
+        val bitmap =
+          try {
+            Bitmap.createBitmap(bmpW, bmpH, Bitmap.Config.ARGB_8888)
+          } catch (_: Throwable) {
+            return@mapNotNull null
+          }
+
+        val c = Canvas(bitmap)
+        val p =
+          Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            isDither = true
+            style = Paint.Style.FILL
+            color = spec.colorInt
+            maskFilter = if (blur > 0f) BlurMaskFilter(blur, BlurMaskFilter.Blur.NORMAL) else null
+          }
+
+        val squircle = SquirclePath(innerW, innerH, radius, cornerSmoothing)
+        val m = Matrix().apply { setTranslate((pad - spread), (pad - spread)) }
+        val shadowPath = Path().apply { squircle.transform(m, this) }
+        c.drawPath(shadowPath, p)
+
+        ShadowRender(
+          bitmap = bitmap,
+          drawX = (-pad + spec.dxPx),
+          drawY = (-pad + spec.dyPx),
+        )
+      }
+  }
+
   fun setCornerSmoothing(c: Float) {
     cornerSmoothing = c
     resetPaths(width.toFloat(), height.toFloat())
@@ -138,7 +187,6 @@ class ResquircleView(context: Context) : ReactViewGroup(context) {
   fun setViewBackgroundColor(color: Int) {
     backgroundColorInt = color
     paint.color = backgroundColorInt
-    rebuildShadowPaints()
     invalidate()
   }
 
@@ -155,7 +203,7 @@ class ResquircleView(context: Context) : ReactViewGroup(context) {
 
   fun setSquircleBoxShadow(value: String?) {
     boxShadowString = value
-    rebuildShadowPaints()
+    rebuildShadowSpecs()
     invalidate()
   }
 
@@ -165,28 +213,16 @@ class ResquircleView(context: Context) : ReactViewGroup(context) {
     invalidate()
   }
 
-  private fun rebuildShadowPaints() {
+  private fun rebuildShadowSpecs() {
     val s = boxShadowString?.trim()
     if (s.isNullOrEmpty()) {
       shadowSpecs = emptyList()
-      shadowPaints = emptyList()
-      shadowPaths = emptyList()
-      setLayerType(LAYER_TYPE_HARDWARE, null)
+      // Reset cached bitmaps.
+      rebuildShadowBitmaps(width.toFloat(), height.toFloat(), borderRadius + (Utils.convertDpToPixel(borderWidth, context) / 2f))
       return
     }
 
-    setLayerType(LAYER_TYPE_SOFTWARE, null)
-
     shadowSpecs = parseBoxShadow(s)
-    shadowPaints =
-      shadowSpecs.map { spec ->
-        Paint(Paint.ANTI_ALIAS_FLAG).apply {
-          style = Paint.Style.FILL
-          color = Color.argb(1, 0, 0, 0)
-          setShadowLayer(spec.blurPx, spec.dxPx, spec.dyPx, spec.colorInt)
-        }
-      }
-
     resetPaths(width.toFloat(), height.toFloat())
   }
 
