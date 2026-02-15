@@ -1,77 +1,119 @@
 package com.resquircle
 
 import android.graphics.Color
+import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.module.annotations.ReactModule
 import com.facebook.react.uimanager.SimpleViewManager
 import com.facebook.react.uimanager.ThemedReactContext
 import com.facebook.react.uimanager.ViewManagerDelegate
-import com.facebook.react.uimanager.annotations.ReactProp
 import com.facebook.react.viewmanagers.ResquircleViewManagerInterface
 import com.facebook.react.viewmanagers.ResquircleViewManagerDelegate
+import com.facebook.react.views.view.ReactViewGroup
+import com.facebook.react.views.view.ReactViewManager
 
 @ReactModule(name = ResquircleViewManager.NAME)
-class ResquircleViewManager : SimpleViewManager<ResquircleView>(),
+class ResquircleViewManager : ReactViewManager(),
   ResquircleViewManagerInterface<ResquircleView> {
-  private val mDelegate: ViewManagerDelegate<ResquircleView>
+
+  private val delegate: ViewManagerDelegate<ReactViewGroup>
 
   init {
-    mDelegate = ResquircleViewManagerDelegate(this)
-  }
-
-  override fun getDelegate(): ViewManagerDelegate<ResquircleView>? {
-    return mDelegate
+    val specificDelegate = ResquircleViewManagerDelegate(ViewManagerWrapper(this))
+    delegate = SplitDelegate(super.getDelegate(), specificDelegate)
   }
 
   override fun getName(): String {
     return NAME
   }
 
-  public override fun createViewInstance(context: ThemedReactContext): ResquircleView {
+  override fun createViewInstance(context: ThemedReactContext): ResquircleView {
     return ResquircleView(context)
   }
 
   // Back-compat: old example prop.
-  @ReactProp(name = "color")
   override fun setColor(view: ResquircleView?, color: Int?) {
     view?.setViewBackgroundColor(color ?: Color.TRANSPARENT)
   }
 
-  @ReactProp(name = "squircleBackgroundColor")
   override fun setSquircleBackgroundColor(view: ResquircleView?, color: Int?) {
     view?.setViewBackgroundColor(color ?: Color.TRANSPARENT)
   }
 
-  @ReactProp(name = "squircleBorderColor")
   override fun setSquircleBorderColor(view: ResquircleView?, color: Int?) {
     view?.setBorderColor(color ?: Color.TRANSPARENT)
   }
 
-  @ReactProp(name = "squircleBorderWidth", defaultFloat = 0f)
   override fun setSquircleBorderWidth(view: ResquircleView?, width: Float) {
     view?.setBorderWidth(width)
   }
 
-  @ReactProp(name = "squircleBoxShadow")
   override fun setSquircleBoxShadow(view: ResquircleView?, boxShadow: String?) {
     view?.setSquircleBoxShadow(boxShadow)
   }
 
-  @ReactProp(name = "borderRadius", defaultFloat = 0f)
   override fun setBorderRadius(view: ResquircleView?, radius: Float) {
-    view?.setBorderRadius(radius)
+    view?.setSquircleBorderRadius(radius)
   }
 
-  @ReactProp(name = "cornerSmoothing", defaultFloat = 0.6f)
   override fun setCornerSmoothing(view: ResquircleView?, smoothing: Float) {
     view?.setCornerSmoothing(smoothing)
   }
 
-  @ReactProp(name = "overflow")
-  override fun setOverflow(view: ResquircleView?, overflow: String?) {
-    view?.setOverflow(overflow)
+  override fun setClipContent(view: ResquircleView?, value: Boolean) {
+    view?.setClipContent(value)
+  }
+
+  override fun getDelegate(): ViewManagerDelegate<ReactViewGroup> {
+    return delegate
   }
 
   companion object {
     const val NAME = "ResquircleView"
+  }
+}
+
+private class ViewManagerWrapper(private val baseVm: ResquircleViewManager) :
+  SimpleViewManager<ResquircleView>(), ResquircleViewManagerInterface<ResquircleView> {
+  override fun createViewInstance(reactContext: ThemedReactContext): ResquircleView {
+    return baseVm.createViewInstance(reactContext)
+  }
+
+  override fun getName(): String {
+    return baseVm.name
+  }
+
+  override fun setColor(view: ResquircleView?, value: Int?) = baseVm.setColor(view, value)
+  override fun setSquircleBackgroundColor(view: ResquircleView?, value: Int?) =
+    baseVm.setSquircleBackgroundColor(view, value)
+
+  override fun setSquircleBorderColor(view: ResquircleView?, value: Int?) =
+    baseVm.setSquircleBorderColor(view, value)
+
+  override fun setSquircleBorderWidth(view: ResquircleView?, value: Float) =
+    baseVm.setSquircleBorderWidth(view, value)
+
+  override fun setBorderRadius(view: ResquircleView?, value: Float) = baseVm.setBorderRadius(view, value)
+  override fun setCornerSmoothing(view: ResquircleView?, value: Float) =
+    baseVm.setCornerSmoothing(view, value)
+
+  override fun setSquircleBoxShadow(view: ResquircleView?, value: String?) =
+    baseVm.setSquircleBoxShadow(view, value)
+
+  override fun setClipContent(view: ResquircleView?, value: Boolean) = baseVm.setClipContent(view, value)
+}
+
+private class SplitDelegate(
+  private val baseDelegate: ViewManagerDelegate<ReactViewGroup>,
+  private val specificDelegate: ViewManagerDelegate<ResquircleView>
+) : ViewManagerDelegate<ReactViewGroup> {
+
+  override fun setProperty(view: ReactViewGroup, propName: String, value: Any?) {
+    baseDelegate.setProperty(view, propName, value)
+    if (view is ResquircleView) specificDelegate.setProperty(view, propName, value)
+  }
+
+  override fun receiveCommand(view: ReactViewGroup, commandName: String, args: ReadableArray?) {
+    baseDelegate.receiveCommand(view, commandName, args)
+    if (view is ResquircleView) specificDelegate.receiveCommand(view, commandName, args)
   }
 }

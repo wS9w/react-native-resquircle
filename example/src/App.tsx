@@ -17,7 +17,10 @@ export default function App() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.sectionTitle}>Basic</Text>
-      <ResquircleView cornerSmoothing={1} style={[styles.card, { boxShadow }]}>
+      <ResquircleView 
+      cornerSmoothing={1} 
+      
+      style={[styles.card, { boxShadow }]}>
         <Text style={styles.title}>ResquircleView</Text>
         <Text style={styles.subtitle}>Native iOS + Android</Text>
       </ResquircleView>
@@ -41,10 +44,7 @@ export default function App() {
       <ResquircleButton
        overflow='hidden'
         cornerSmoothing={1}
-        style={styles.button}
-        onPress={() => {
-          console.log('pressed');
-        }}
+        style={[styles.button , {boxShadow}]}
       >
         {/* <View style={{backgroundColor: 'red', width: 400 , height: 300 , }}/> */}
         <Text style={styles.buttonText}>ResquircleButton</Text>
